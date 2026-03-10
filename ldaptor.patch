@@ -1,0 +1,127 @@
+class MatchMixin:
+    def match(self, filter):
+        if isinstance(filter, pureldap.LDAPFilter_present):
+            for value in get_strings(filter.value):
+                if value in self:
+                    return True
+            return False
+        elif isinstance(filter, pureldap.LDAPFilter_equalityMatch):
+            assertion = filter.assertionValue.value
+            values = self.get(filter.attributeDesc.value, [])
+            # bytes comparaison
+            for val in values:
+                if isinstance(val, bytes) and isinstance(assertion, bytes):
+                    if val == assertion:
+                        return True
+            # fallback
+            assertion_lower = safelower(assertion)
+            for val in values:
+                try:
+                    if assertion_lower == safelower(val):
+                        return True
+                except Exception:
+                    continue
+            return False
+        elif isinstance(filter, pureldap.LDAPFilter_substrings):
+            if filter.type not in self:
+                return False
+            possibleMatches = self[filter.type]
+            substrings = filter.substrings[:]
+
+            if substrings and isinstance(
+                filter.substrings[0], pureldap.LDAPFilter_substrings_initial
+            ):
+                possibleMatches = [
+                    x[len(filter.substrings[0].value) :]
+                    for x in possibleMatches
+                    if x.lower().startswith(filter.substrings[0].value.lower())
+                ]
+                del substrings[0]
+
+            if substrings and isinstance(
+                filter.substrings[-1], pureldap.LDAPFilter_substrings_final
+            ):
+                possibleMatches = [
+                    x[: -len(filter.substrings[0].value)]
+                    for x in possibleMatches
+                    if x.lower().endswith(filter.substrings[-1].value.lower())
+                ]
+                del substrings[-1]
+
+            while possibleMatches and substrings:
+                assert isinstance(substrings[0], pureldap.LDAPFilter_substrings_any)
+                r = []
+                for possible in possibleMatches:
+                    i = possible.lower().find(substrings[0].value.lower())
+                    if i >= 0:
+                        r.append(possible[i:])
+                possibleMatches = r
+                del substrings[0]
+            if possibleMatches and not substrings:
+                return True
+            return False
+        elif isinstance(filter, pureldap.LDAPFilter_greaterOrEqual):
+            if filter.attributeDesc.value not in self:
+                return False
+            for value in self[filter.attributeDesc.value]:
+                if value >= filter.assertionValue.value:
+                    return True
+            return False
+        elif isinstance(filter, pureldap.LDAPFilter_lessOrEqual):
+            if filter.attributeDesc.value not in self:
+                return False
+            for value in self[filter.attributeDesc.value]:
+                if value <= filter.assertionValue.value:
+                    return True
+            return False
+        elif isinstance(filter, pureldap.LDAPFilter_and):
+            for filt in filter:
+                if not self.match(filt):
+                    return False
+            return True
+        elif isinstance(filter, pureldap.LDAPFilter_or):
+            for filt in filter:
+                if self.match(filt):
+                    return True
+            return False
+        elif isinstance(filter, pureldap.LDAPFilter_not):
+            return not self.match(filter.value)
+        elif isinstance(filter, pureldap.LDAPFilter_extensibleMatch):
+            if filter.matchingRule is None:
+                attrib = filter.type.value
+                match_value = filter.matchValue.value
+                match_value_lower = safelower(match_value)
+                if match_value_lower in [val.lower() for val in self.get(attrib, [])]:
+                    return True
+                for rdn in self.dn.listOfRDNs:
+                    for av in rdn.attributeTypesAndValues:
+                        if attrib is None or attrib == av.attributeType:
+                            if match_value_lower == safelower(av.value):
+                                return True
+                return False
+            else:
+                rule = filter.matchingRule.value.decode()
+
+                attrib = filter.type.value
+                match_value = int(filter.matchValue.value)
+
+                vals = self.get(attrib, [])
+                if not vals:
+                    return False
+
+                try:
+                    entry_val = int(vals.pop())
+                except Exception as e:
+                    return False
+
+                # LDAP_MATCHING_RULE_BIT_AND
+                if rule == "1.2.840.113556.1.4.803":
+                    return (entry_val & match_value) == match_value
+
+                # LDAP_MATCHING_RULE_BIT_OR
+                if rule == "1.2.840.113556.1.4.804":
+                    return (entry_val & match_value) != 0
+
+                raise ldapsyntax.MatchNotImplemented(filter)
+        else:
+            raise ldapsyntax.MatchNotImplemented(filter)
