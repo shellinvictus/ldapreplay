@@ -1,4 +1,5 @@
 class MatchMixin:
+    PATCHED = True
     def match(self, filter):
         if isinstance(filter, pureldap.LDAPFilter_present):
             for value in get_strings(filter.value):

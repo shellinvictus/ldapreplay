@@ -19,6 +19,11 @@ from ldaptor.protocols.ldap import ldapserver, ldaperrors
 from ldaptor.protocols.ldap.ldapsyntax import LDAPEntry
 from ldaptor.protocols.ldap.distinguishedname import DistinguishedName
 from ldap3.protocol.schemas.ad2012R2 import ad_2012_r2_schema
+from ldaptor.entryhelpers import MatchMixin
+
+if 'PATCHED' not in dir(MatchMixin):
+    print('[-] you need to patch ldaptor! Check the README')
+    exit(0)
 
 # otherwise it fails with bloodhound-python
 ldapserver.pureldap.LDAPBERDecoderContext_LDAPBindRequest.Identities[0x89] = BEROctetString
@@ -258,7 +263,7 @@ class NTDSBackend:
         # subschemaSubentry
         # ntdissector doesn't store attribute syntaxes, so hard code a schema
         o = {
-            'distinguishedName': f'CN=MiniSchema,CN=Schema,CN=Configuration,{self.fqdn}',
+            'distinguishedName': f'CN=MiniSchema,CN=Schema,CN=Configuration,{self.root_domain}',
             'objectCategory': 'subschema',
             'name': 'MiniSchema',
             'objectClass': ['subschema', 'top'],
@@ -457,7 +462,7 @@ if __name__ == '__main__':
     log('# use the same IP for the first iptables and the parameter -ns!', Fore.BLUE)
     print('sudo iptables -t nat -I OUTPUT -d 127.53.0.1 -p udp --dport 53 -j REDIRECT --to-ports 5353')
     print('sudo iptables -t nat -I OUTPUT -d 127.0.0.1 -p tcp --dport 389 -j REDIRECT --to-ports 3890')
-    print(f'bloodhound.py -ns 127.53.0.1 -d {backend.fqdn} -c DCOnly -u whatever -p whatever')
+    print(f'bloodhound.py -ns 127.53.0.1 -d {backend.fqdn} -c DCOnly -u whatever -p whatever --auth-method ntlm --disable-pooling')
     print()
 
     factory = LDAPFactory(backend)
