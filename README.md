@@ -49,7 +49,9 @@ for the class `MatchMixin`. Replace this class by the content of `ldaptor.patch`
 ## 4. Patch ntdissector
 
 Use my repo [ntdissector](https://github.com/shellinvictus/ntdissector) with the
-correct patch.
+correct patch and use the parameter `-raw`.
+
+    ntdissector -ntds ntds.dit -system SYSTEM -outputdir out -ts -f all -raw
 
 
 # Use
